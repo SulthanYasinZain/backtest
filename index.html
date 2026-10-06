@@ -97,6 +97,74 @@
         <span id="legend-vol">Vol: --</span>
       </div>
 
+      <!-- Floating Drawing Toolbar (TradingView Style) -->
+      <div class="chart-drawing-toolbar" id="drawing-toolbar">
+        <button class="draw-tool-btn active" data-tool="cursor" title="Cursor / Pan Mode [V / Esc]">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 3l7 18 3-7 7-3L3 3z"/>
+          </svg>
+        </button>
+        <button class="draw-tool-btn" data-tool="pencil" title="Pencil / Freehand Drawing [P]">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9"/>
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
+        </button>
+        <button class="draw-tool-btn" data-tool="eraser" title="Eraser [E]">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/>
+            <path d="M22 21H7"/>
+            <path d="m5 11 9 9"/>
+          </svg>
+        </button>
+
+        <div class="draw-toolbar-divider"></div>
+
+        <!-- Color & Width Selector -->
+        <div class="draw-color-wrapper">
+          <button class="draw-tool-btn draw-color-preview-btn" id="btn-draw-color" title="Color & Stroke Width">
+            <span class="draw-color-dot" id="draw-color-indicator" style="background-color: #ffd700;"></span>
+          </button>
+          <div class="draw-color-palette" id="draw-color-palette" style="display: none;">
+            <div class="palette-colors">
+              <span class="color-swatch active" data-color="#ffd700" style="background: #ffd700;" title="Gold / Yellow"></span>
+              <span class="color-swatch" data-color="#089981" style="background: #089981;" title="Bullish Green"></span>
+              <span class="color-swatch" data-color="#f23645" style="background: #f23645;" title="Bearish Red"></span>
+              <span class="color-swatch" data-color="#2962ff" style="background: #2962ff;" title="Electric Blue"></span>
+              <span class="color-swatch" data-color="#00f0ff" style="background: #00f0ff;" title="Neon Cyan"></span>
+              <span class="color-swatch" data-color="#b388ff" style="background: #b388ff;" title="Purple"></span>
+              <span class="color-swatch" data-color="#ffffff" style="background: #ffffff;" title="White"></span>
+            </div>
+            <div class="palette-widths">
+              <button class="width-btn" data-width="1.5" title="Fine (1.5px)">1x</button>
+              <button class="width-btn active" data-width="2.5" title="Medium (2.5px)">2x</button>
+              <button class="width-btn" data-width="4.5" title="Bold (4.5px)">4x</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="draw-toolbar-divider"></div>
+
+        <!-- Undo Action -->
+        <button class="draw-tool-btn" id="btn-draw-undo" title="Undo [Ctrl+Z]">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7v6h6"/>
+            <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
+          </svg>
+        </button>
+
+        <!-- Clear All Drawings -->
+        <button class="draw-tool-btn draw-btn-danger" id="btn-draw-clear" title="Clear All Drawings">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6h18"/>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            <line x1="10" y1="11" x2="10" y2="17"/>
+            <line x1="14" y1="11" x2="14" y2="17"/>
+          </svg>
+        </button>
+      </div>
+
       <div id="chart-container"></div>
       
       <!-- RSI Sub-Pane (Hidden by default until toggled) -->
@@ -370,6 +438,7 @@
   <script src="js/replay-engine.js"></script>
   <script src="js/trading-engine.js"></script>
   <script src="js/chart-manager.js"></script>
+  <script src="js/drawing-manager.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

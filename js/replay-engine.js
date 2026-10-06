@@ -30,13 +30,13 @@ class ReplayEngine {
   startRandomSession() {
     this.pause();
     const total = window.dataEngine.getCount();
-    if (total < 500) {
+    if (total < 250) {
       console.warn('Not enough candles for random session');
       return;
     }
 
-    const minStart = 250;
-    const maxStart = Math.max(minStart + 1, total - 1500);
+    const minStart = Math.min(250, Math.max(0, Math.floor(total * 0.1)));
+    const maxStart = Math.max(minStart + 1, total - (total > 2000 ? 1500 : 50));
     const randomIdx = Math.floor(Math.random() * (maxStart - minStart)) + minStart;
 
     this.startIndex = randomIdx;
@@ -45,8 +45,10 @@ class ReplayEngine {
     this.sessionNumber++;
     this.blindMode = true;
 
+    if (window.refreshChartData) {
+      window.refreshChartData();
+    }
     this.notifyState();
-    this.emitCurrentTick();
   }
 
   togglePlay() {
@@ -166,7 +168,6 @@ class ReplayEngine {
     if (window.refreshChartData) {
       window.refreshChartData();
     }
-    this.emitCurrentTick();
     this.notifyState();
   }
 
@@ -187,7 +188,6 @@ class ReplayEngine {
     if (window.refreshChartData) {
       window.refreshChartData();
     }
-    this.emitCurrentTick();
     this.notifyState();
   }
 

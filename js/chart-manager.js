@@ -304,6 +304,13 @@ class ChartManager {
   appendCandle(candle) {
     if (!candle) return;
 
+    // Prevent Lightweight Charts crash if candle time is older than latest series bar
+    const len = this.recentCandles.length;
+    if (len > 0 && candle.time < this.recentCandles[len - 1].time) {
+      console.warn('appendCandle: Candle time is older than latest series bar; skipping append.', candle.time, this.recentCandles[len - 1].time);
+      return;
+    }
+
     // 1. Update Candlestick Series
     this.candleSeries.update(candle);
 
@@ -315,7 +322,6 @@ class ChartManager {
     });
 
     // 3. Maintain rolling window of recent candles
-    const len = this.recentCandles.length;
     const isNewBar = (len === 0 || this.recentCandles[len - 1].time !== candle.time);
 
     if (!isNewBar) {

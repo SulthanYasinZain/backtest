@@ -14,6 +14,7 @@
   <script src="../js/indicators.js"></script>
   <script src="../js/data-engine.js"></script>
   <script src="../js/trading-engine.js"></script>
+  <script src="../js/drawing-manager.js"></script>
 </head>
 <body>
   <h1>⚡ Trading Simulator Engine Test Suite</h1>
@@ -140,6 +141,46 @@
       const metrics = engine.getMetrics(63200);
       assert(metrics.winRate === 100, `Win rate should be 100%, got ${metrics.winRate}%`);
       assert(metrics.netProfit === 300, `Net profit should be $300, got ${metrics.netProfit}`);
+
+      // Suite 4: Drawing Engine (Pencil & Eraser)
+      const dm = new DrawingManager();
+      assert(dm.activeTool === 'cursor', 'DrawingManager initializes in cursor mode');
+      dm.setTool('pencil');
+      assert(dm.activeTool === 'pencil', 'Switches to pencil tool');
+      dm.setColor('#089981');
+      assert(dm.color === '#089981', 'Sets stroke color correctly');
+      dm.setWidth(4.5);
+      assert(dm.width === 4.5, 'Sets stroke width correctly');
+
+      // Simulate a pencil stroke
+      dm.isDrawing = true;
+      dm.currentStroke = {
+        id: 1,
+        color: dm.color,
+        width: dm.width,
+        points: [
+          { logical: 10, price: 60000, time: 1600000000, x: 100, y: 100 },
+          { logical: 11, price: 60500, time: 1600000300, x: 110, y: 110 }
+        ]
+      };
+      dm.onPointerUp();
+      assert(dm.strokes.length === 1, 'Pencil stroke recorded in strokes list');
+
+      // Test Eraser
+      dm.setTool('eraser');
+      assert(dm.activeTool === 'eraser', 'Switches to eraser tool');
+      dm.eraseAt(105, 105);
+      assert(dm.strokes.length === 0, 'Eraser removes stroke when clicked near it');
+
+      // Test Undo
+      dm.undo();
+      assert(dm.strokes.length === 1, 'Undo restores erased stroke');
+
+      // Test Clear
+      dm.clear();
+      assert(dm.strokes.length === 0, 'Clear removes all strokes');
+      dm.undo();
+      assert(dm.strokes.length === 1, 'Undo restores cleared strokes');
 
       // Summary
       summaryEl.innerText = `Test Results: ${passed} Passed, ${failed} Failed`;

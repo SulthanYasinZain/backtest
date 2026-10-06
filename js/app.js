@@ -14,6 +14,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Chart Containers
   window.chartManager.init('chart-container', 'rsi-chart-container');
+  if (window.drawingManager) {
+    window.drawingManager.init(window.chartManager, 'chart-container');
+  }
 
   // Toast Notification System
   function showToast(message, type = 'info') {
@@ -220,6 +223,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Start / Spawn session
   function startSessionWithData(candles) {
     window.dataEngine.setCandles(candles);
+    window.chartManager.clearMarkers();
+    window.chartManager.clearFibonacci();
+    window.tradingEngine.position = null;
+    window.tradingEngine.pendingOrders = [];
+    window.tradingEngine.notifyUpdate();
+    window.chartManager.updatePositionLines(null);
+    const eraModal = document.getElementById('era-modal');
+    if (eraModal) eraModal.style.display = 'none';
     window.replayEngine.startRandomSession();
     updateUIHeader();
   }
@@ -233,6 +244,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const currentTf = window.dataEngine.currentTimeframe;
     const activeCandle = window.dataEngine.getLatestResampledCandle(candle, currentTf);
     window.chartManager.appendCandle(activeCandle);
+    if (window.drawingManager) {
+      window.drawingManager.renderAll();
+    }
 
     // 3. Update HUD header & price info
     updatePriceHUD(candle);
@@ -309,6 +323,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       currentTf
     );
     window.chartManager.setData(candles);
+
+    const liveCandle = window.replayEngine.getLiveCandle();
+    if (liveCandle) {
+      updatePriceHUD(liveCandle);
+      updateAnalyticsHUD();
+    }
+
+    if (window.drawingManager) {
+      window.drawingManager.renderAll();
+    }
   }
   window.refreshChartData = refreshChartData;
 
@@ -372,10 +396,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.chartManager.clearMarkers();
         window.chartManager.clearFibonacci();
         window.tradingEngine.position = null;
+        window.tradingEngine.pendingOrders = [];
         window.tradingEngine.notifyUpdate();
         window.chartManager.updatePositionLines(null);
+        const eraModal = document.getElementById('era-modal');
+        if (eraModal) eraModal.style.display = 'none';
         window.replayEngine.startRandomSession();
-        refreshChartData();
         showToast('Spawned into a new blind historical market regime!', 'info');
       }
     });
@@ -842,6 +868,25 @@ document.addEventListener('DOMContentLoaded', async () => {
       handleClose(100);
     } else if (e.code === 'KeyX') {
       window.tradingEngine.moveToBreakeven();
+    } else if (e.code === 'KeyP') {
+      const btn = document.querySelector('.draw-tool-btn[data-tool="pencil"]');
+      if (btn) btn.click();
+    } else if (e.code === 'KeyE') {
+      const btn = document.querySelector('.draw-tool-btn[data-tool="eraser"]');
+      if (btn) btn.click();
+    } else if (e.code === 'KeyV' || e.code === 'Escape') {
+      const btn = document.querySelector('.draw-tool-btn[data-tool="cursor"]');
+      if (btn) btn.click();
+    } else if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        window.drawingManager?.redo();
+      } else {
+        window.drawingManager?.undo();
+      }
+    } else if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') {
+      e.preventDefault();
+      window.drawingManager?.redo();
     } else if (e.code === 'Digit1') {
       const btn = document.querySelector('.tf-btn[data-tf="5m"]');
       if (btn) btn.click();
@@ -856,6 +901,111 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (btn) btn.click();
     }
   });
+
+  // Setup Chart Drawing Toolbar (Pencil, Eraser, Colors, Widths, Undo, Clear)
+  function setupDrawingToolbar() {
+    const toolbar = document.getElementById('drawing-toolbar');
+    if (!toolbar || !window.drawingManager) return;
+
+    const toolButtons = toolbar.querySelectorAll('.draw-tool-btn[data-tool]');
+    const colorBtn = document.getElementById('btn-draw-color');
+    const colorPalette = document.getElementById('draw-color-palette');
+    const colorIndicator = document.getElementById('draw-color-indicator');
+    const swatches = toolbar.querySelectorAll('.color-swatch');
+    const widthButtons = toolbar.querySelectorAll('.width-btn');
+    const undoBtn = document.getElementById('btn-draw-undo');
+    const clearBtn = document.getElementById('btn-draw-clear');
+
+    // Tool switching
+    toolButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const tool = btn.getAttribute('data-tool');
+        toolButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        window.drawingManager.setTool(tool);
+        if (colorPalette) colorPalette.style.display = 'none';
+
+        if (tool === 'pencil') {
+          showToast('✏️ Pencil tool: Draw directly on the chart', 'info');
+        } else if (tool === 'eraser') {
+          showToast('🧹 Eraser tool: Click or drag over strokes to erase', 'info');
+        }
+      });
+    });
+
+    // Toggle color palette popover
+    if (colorBtn && colorPalette) {
+      colorBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = colorPalette.style.display === 'flex';
+        colorPalette.style.display = isOpen ? 'none' : 'flex';
+      });
+
+      // Close on outside click
+      document.addEventListener('click', (e) => {
+        if (!toolbar.contains(e.target)) {
+          colorPalette.style.display = 'none';
+        }
+      });
+    }
+
+    // Color Swatches
+    swatches.forEach(swatch => {
+      swatch.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const color = swatch.getAttribute('data-color');
+        swatches.forEach(s => s.classList.remove('active'));
+        swatch.classList.add('active');
+
+        window.drawingManager.setColor(color);
+        if (colorIndicator) colorIndicator.style.backgroundColor = color;
+
+        // Auto switch to pencil if currently in cursor mode
+        if (window.drawingManager.activeTool === 'cursor') {
+          const pencilBtn = toolbar.querySelector('.draw-tool-btn[data-tool="pencil"]');
+          if (pencilBtn) pencilBtn.click();
+        }
+      });
+    });
+
+    // Stroke Widths
+    widthButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const width = parseFloat(btn.getAttribute('data-width'));
+        widthButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        window.drawingManager.setWidth(width);
+      });
+    });
+
+    // Undo
+    if (undoBtn) {
+      undoBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.drawingManager.undo();
+      });
+    }
+
+    // Clear All Drawings
+    if (clearBtn) {
+      clearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (window.drawingManager.strokes.length === 0) {
+          showToast('No drawings to clear', 'info');
+          return;
+        }
+        if (confirm('Clear all drawings on the chart?')) {
+          window.drawingManager.clear();
+          showToast('All chart drawings cleared', 'info');
+        }
+      });
+    }
+  }
+
+  // Initialize Drawing Toolbar
+  setupDrawingToolbar();
 
   // Re-render canvas on window resize
   window.addEventListener('resize', renderEquityCurve);
