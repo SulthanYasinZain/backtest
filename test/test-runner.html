@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Trading Simulator Engine Unit Tests</title>
+  <style>
+    body { font-family: monospace; background: #0d1117; color: #c9d1d9; padding: 20px; }
+    h1 { color: #58a6ff; font-size: 20px; }
+    .test-pass { color: #3fb950; }
+    .test-fail { color: #f85149; font-weight: bold; }
+    .suite { margin-top: 15px; padding: 10px; border: 1px solid #30363d; border-radius: 6px; }
+    .summary { margin-top: 20px; font-weight: bold; font-size: 16px; }
+  </style>
+  <script src="../js/indicators.js"></script>
+  <script src="../js/data-engine.js"></script>
+  <script src="../js/trading-engine.js"></script>
+</head>
+<body>
+  <h1>⚡ Trading Simulator Engine Test Suite</h1>
+  <div id="results"></div>
+  <div id="summary" class="summary"></div>
+
+  <script>
+    const resultsEl = document.getElementById('results');
+    const summaryEl = document.getElementById('summary');
+    let passed = 0;
+    let failed = 0;
+
+    function assert(condition, message) {
+      const line = document.createElement('div');
+      if (condition) {
+        line.className = 'test-pass';
+        line.innerText = `✔ PASS: ${message}`;
+        passed++;
+      } else {
+        line.className = 'test-fail';
+        line.innerText = `✖ FAIL: ${message}`;
+        failed++;
+      }
+      resultsEl.appendChild(line);
+    }
+
+    function runTests() {
+      // Suite 1: Indicators Engine
+      const sampleCandles = [];
+      for (let i = 0; i < 50; i++) {
+        sampleCandles.push({
+          time: 1600000000 + i * 300,
+          open: 100 + i,
+          high: 105 + i,
+          low: 95 + i,
+          close: 100 + i,
+          volume: 10 + i
+        });
+      }
+
+      // SMA 20
+      const sma20 = IndicatorsEngine.calculateSMA(sampleCandles, 20);
+      assert(sma20.length === 31, 'SMA 20 returns correct number of items');
+      assert(sma20[0].value === 109.5, `First SMA 20 value expected 109.5, got ${sma20[0].value}`);
+
+      // EMA 9
+      const ema9 = IndicatorsEngine.calculateEMA(sampleCandles, 9);
+      assert(ema9.length === 42, 'EMA 9 returns correct number of items');
+      assert(typeof ema9[ema9.length - 1].value === 'number', 'EMA 9 computes numeric values');
+
+      // Bollinger Bands (20, 2)
+      const bb = IndicatorsEngine.calculateBollingerBands(sampleCandles, 20, 2);
+      assert(bb.upper.length === 31 && bb.lower.length === 31, 'Bollinger Bands computes upper and lower bands');
+      assert(bb.upper[0].value > bb.middle[0].value && bb.middle[0].value > bb.lower[0].value, 'Upper > Middle > Lower in Bollinger Bands');
+
+      // Fibonacci Retracement Levels
+      const fibs = IndicatorsEngine.calculateFibonacciLevels(70000, 60000, true);
+      assert(fibs.length === 7, 'Fibonacci calculates 7 standard levels');
+      const fib50 = fibs.find(f => f.ratio === 0.5);
+      const fib618 = fibs.find(f => f.ratio === 0.618);
+      assert(fib50 && fib50.price === 65000, `Fibonacci 0.500 level is 65000, got ${fib50.price}`);
+      assert(fib618 && fib618.price === 63820, `Fibonacci 0.618 level is 63820, got ${fib618.price}`);
+
+      // RSI 14
+      const rsi = IndicatorsEngine.calculateRSI(sampleCandles, 14);
+      assert(rsi.length === 36, 'RSI 14 computes correct number of periods');
+      assert(rsi[rsi.length - 1].value >= 0 && rsi[rsi.length - 1].value <= 100, 'RSI oscillates within [0, 100]');
+
+      // Suite 2: Data Engine Timeframe Resampling
+      window.dataEngine.setCandles(sampleCandles);
+      const resampled15m = window.dataEngine.getSessionCandles(20, sampleCandles.length - 1, 20, '15m');
+      assert(resampled15m.length > 0, 'Resampler produces 15m candles from 5m data');
+      assert(resampled15m[0].high >= resampled15m[0].open, 'Resampled 15m candle High is >= Open');
+
+      // Suite 3: Futures Trading Engine
+      const engine = new FuturesTradingEngine(10000);
+      assert(engine.balance === 10000, 'Initial balance is $10,000');
+
+      // Risk % sizing
+      // Risk 1% of $10,000 ($100), Entry = 60,000, SL = 59,000 (diff = 1000). Size = $100 / 1000 = 0.1 BTC ($6,000 notional)
+      const riskCalc = engine.calculateSizeByRisk(1, 60000, 59000);
+      assert(riskCalc.dollarRisk === 100, `Calculated risk should be $100, got ${riskCalc.dollarRisk}`);
+      assert(riskCalc.sizeBtc === 0.1, `Calculated size should be 0.1 BTC, got ${riskCalc.sizeBtc}`);
+
+      // Liquidation Price calculation
+      const liqLong10x = engine.calculateLiquidationPrice('LONG', 50000, 10);
+      assert(liqLong10x === 50000 * (1 - 0.1 + 0.005), `10x Long Liquidation is $45,250, got ${liqLong10x}`);
+
+      const liqShort10x = engine.calculateLiquidationPrice('SHORT', 50000, 10);
+      assert(liqShort10x === 50000 * (1 + 0.1 - 0.005), `10x Short Liquidation is $54,750, got ${liqShort10x}`);
+
+      // Open Long position
+      const opened = engine.openMarketPosition({
+        side: 'LONG',
+        entryPrice: 60000,
+        sizeBtc: 0.1,
+        leverage: 10,
+        stopLoss: 59000,
+        takeProfit: 63000,
+        tag: 'Fib 0.618 Pocket',
+        time: 1600000000
+      });
+      assert(opened === true, 'Successfully opened 10x Long position');
+      assert(engine.position !== null, 'Active position is tracked');
+
+      // Breakeven check
+      engine.moveToBreakeven();
+      assert(engine.position.stopLoss === 60000, 'Stop Loss successfully moved to Breakeven (60000)');
+
+      // Take Profit trigger test
+      engine.processCandleTick({
+        time: 1600000300,
+        open: 61000,
+        high: 63500, // Hits 63,000 TP!
+        low: 60500,
+        close: 63200,
+        volume: 50
+      });
+      assert(engine.position === null, 'Position successfully closed at Take Profit');
+      assert(engine.closedTrades.length === 1, 'Trade recorded in closed trades journal');
+      assert(engine.closedTrades[0].pnlUsdt === 300, `Profit expected $300 ((63000-60000)*0.1), got ${engine.closedTrades[0].pnlUsdt}`);
+
+      // Metrics
+      const metrics = engine.getMetrics(63200);
+      assert(metrics.winRate === 100, `Win rate should be 100%, got ${metrics.winRate}%`);
+      assert(metrics.netProfit === 300, `Net profit should be $300, got ${metrics.netProfit}`);
+
+      // Summary
+      summaryEl.innerText = `Test Results: ${passed} Passed, ${failed} Failed`;
+      summaryEl.className = failed === 0 ? 'summary test-pass' : 'summary test-fail';
+    }
+
+    window.onload = runTests;
+  </script>
+</body>
+</html>

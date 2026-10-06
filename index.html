@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BTC Futures Simulator - Pro Blind Backtester</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <!-- TradingView Lightweight Charts Library (Local Offline Copy with CDN fallback) -->
+  <script src="lib/lightweight-charts.standalone.production.js"></script>
+  <script>
+    if (typeof LightweightCharts === 'undefined') {
+      document.write('<script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"><\/script>');
+    }
+  </script>
+</head>
+<body>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Header Bar -->
+  <header class="terminal-header">
+    <div class="brand-section">
+      <!-- Timeframe Selector -->
+      <div class="tf-group">
+        <button class="tf-btn active" data-tf="5m">5M</button>
+        <button class="tf-btn" data-tf="15m">15M</button>
+        <button class="tf-btn" data-tf="1h">1H</button>
+        <button class="tf-btn" data-tf="4h">4H</button>
+      </div>
+
+      <!-- Session (Clean text, no ugly border) -->
+      <div id="session-bar-counter" class="session-label">Session 1</div>
+
+      <!-- In-House Simulated Clock (Clean text, no border) -->
+      <div id="inhouse-clock-badge" class="clock-label" title="Simulated Clock">00:00:00</div>
+    </div>
+
+    <!-- Replay Toolbar -->
+    <div class="replay-toolbar">
+      <button id="btn-play-pause" class="btn-control" title="Shortcut: Space">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Play
+      </button>
+      <button id="btn-step-next" class="btn-control" title="Shortcut: D or Right Arrow (Instant +1 Bar)">
+        Step +1
+      </button>
+      <button id="btn-step-5" class="btn-control" title="Step 5 Bars">
+        +5 Bars
+      </button>
+
+      <!-- Speed Presets -->
+      <div class="speed-group">
+        <button class="speed-pill active" data-speed="1" title="Real-Time 1:1 (5 real minutes per bar)">1x (5m)</button>
+        <button class="speed-pill" data-speed="5" title="1 minute per bar">5x (1m)</button>
+        <button class="speed-pill" data-speed="10" title="30 seconds per bar">10x (30s)</button>
+        <button class="speed-pill" data-speed="30" title="10 seconds per bar">30x (10s)</button>
+        <button class="speed-pill" data-speed="60" title="5 seconds per bar">60x (5s)</button>
+        <button class="speed-pill" data-speed="300" title="1 second per bar">300x (1s)</button>
+      </div>
+
+      <button id="btn-random-session" class="btn-control" title="Spawn into a new random historical market">
+        🎲 New Random Session
+      </button>
+    </div>
+
+    <!-- Live Current Price -->
+    <div class="price-hud">
+      <div id="hud-current-price" class="price-up">$0.00</div>
+    </div>
+  </header>
+
+  <!-- Technical Indicators Toolbar -->
+  <div class="indicator-bar">
+    <span class="ind-label">Indicators:</span>
+    <button class="ind-btn active" data-indicator="ema9">EMA 9 (Momentum)</button>
+    <button class="ind-btn active" data-indicator="ma20">MA 20 (Short-Term)</button>
+    <button class="ind-btn" data-indicator="ma50">MA 50 (Trend)</button>
+    <button class="ind-btn" data-indicator="ma200">MA 200 (Macro)</button>
+    <button class="ind-btn" data-indicator="bollinger">Bollinger Bands</button>
+    <button class="ind-btn active" data-indicator="fibonacci">Fibonacci Retracement (0.618 Pocket)</button>
+    <button class="ind-btn" data-indicator="rsi">RSI (14)</button>
+  </div>
+
+  <!-- Main Trading Workspace -->
+  <div class="workspace">
+    
+    <!-- Chart Viewport -->
+    <div class="chart-area">
+      <!-- TradingView Style Floating OHLCV Legend -->
+      <div class="chart-ohlc-legend">
+        <span class="legend-symbol">BTC/USDT</span>
+        <span id="legend-open">O: --</span>
+        <span id="legend-high">H: --</span>
+        <span id="legend-low">L: --</span>
+        <span id="legend-close">C: --</span>
+        <span id="legend-vol">Vol: --</span>
+      </div>
+
+      <div id="chart-container"></div>
+      
+      <!-- RSI Sub-Pane (Hidden by default until toggled) -->
+      <div id="rsi-container-wrapper" style="display: none;">
+        <div id="rsi-chart-container"></div>
+      </div>
+    </div>
+
+    <!-- Futures Order Panel (Right Sidebar) -->
+    <div class="order-sidebar">
+      
+      <!-- Long / Short Switcher -->
+      <div class="side-tabs">
+        <div id="tab-side-long" class="side-tab long-tab active">LONG (Buy)</div>
+        <div id="tab-side-short" class="side-tab short-tab">SHORT (Sell)</div>
+      </div>
+
+      <!-- Risk Management Calculator (% Risk per trade) -->
+      <div class="form-group">
+        <label class="form-label">
+          <span>Risk % of Account</span>
+          <span class="tooltip-badge" data-tooltip="Automatically calculates position size so that if Stop Loss hits, you lose exactly this % of your balance.">?</span>
+        </label>
+        <div class="risk-selector">
+          <div class="risk-pill active" data-risk="1">1% Risk</div>
+          <div class="risk-pill" data-risk="2">2% Risk</div>
+          <div class="risk-pill" data-risk="5">5% Risk</div>
+          <div class="risk-pill" data-risk="10">10% Risk</div>
+        </div>
+      </div>
+
+      <!-- Leverage Slider -->
+      <div class="form-group">
+        <div class="leverage-header">
+          <span>Leverage</span>
+          <span id="leverage-value-badge">10x</span>
+        </div>
+        <input type="range" id="leverage-slider" class="leverage-slider" min="1" max="100" value="10">
+        <div class="lev-presets">
+          <div class="lev-preset" data-lev="1">1x</div>
+          <div class="lev-preset" data-lev="5">5x</div>
+          <div class="lev-preset active" data-lev="10">10x</div>
+          <div class="lev-preset" data-lev="20">20x</div>
+          <div class="lev-preset" data-lev="50">50x</div>
+          <div class="lev-preset" data-lev="100">100x</div>
+        </div>
+      </div>
+
+      <!-- Order Sizing & SL/TP Inputs -->
+      <div class="form-group">
+        <label class="form-label">Stop Loss (Price)</label>
+        <input type="number" id="input-stop-loss" class="form-input" placeholder="e.g. 64200" step="1">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Take Profit (Price)</label>
+        <input type="number" id="input-take-profit" class="form-input" placeholder="e.g. 68500" step="1">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Position Size (USDT or Auto-Calc)</label>
+        <input type="number" id="input-size-usdt" class="form-input" placeholder="Auto-calculated from % Risk" step="50">
+      </div>
+
+      <!-- Strategy Tagging for Journal -->
+      <div class="form-group">
+        <label class="form-label">Strategy / Setup Tag</label>
+        <select id="select-strategy-tag" class="form-select">
+          <option value="20 MA Pullback">20 MA Pullback</option>
+          <option value="Fib 0.618 Pocket">Fib 0.618 Golden Pocket</option>
+          <option value="Key Breakout">Key Level Breakout</option>
+          <option value="RSI Divergence">RSI Divergence</option>
+          <option value="Support / Resistance">Support / Resistance Bounce</option>
+          <option value="Trend Continuation">Trend Continuation</option>
+          <option value="Discretionary">Discretionary / Price Action</option>
+        </select>
+      </div>
+
+      <!-- Order Preview Calculations -->
+      <div style="background: rgba(0,0,0,0.2); padding: 8px 10px; border-radius: 4px;">
+        <div class="order-summary-row">
+          <span>Calculated Size:</span>
+          <strong id="calc-risk-size">--</strong>
+        </div>
+        <div class="order-summary-row">
+          <span>Risk : Reward Ratio:</span>
+          <strong id="calc-rr-preview">--</strong>
+        </div>
+        <div class="order-summary-row">
+          <span>Est. Liquidation:</span>
+          <strong id="calc-liq-preview" class="text-yellow">--</strong>
+        </div>
+      </div>
+
+      <!-- Order CTA Button -->
+      <button id="btn-submit-order" class="btn-order-submit btn-buy">
+        Buy / Long BTC
+      </button>
+
+      <!-- Active Position Card (Floating in Sidebar) -->
+      <div id="active-position-card" class="active-position-card">
+        <div class="pos-header">
+          <span id="pos-side-badge" class="badge badge-long">LONG 10x</span>
+          <div>
+            <span id="pos-pnl-val" class="text-green font-bold">+$0.00</span>
+            <span id="pos-roe-val" class="text-green">(+0.0%)</span>
+          </div>
+        </div>
+
+        <div class="pos-grid">
+          <div class="pos-grid-item">
+            <span>Size</span>
+            <strong id="pos-size-val">--</strong>
+          </div>
+          <div class="pos-grid-item">
+            <span>Entry</span>
+            <strong id="pos-entry-val">--</strong>
+          </div>
+          <div class="pos-grid-item">
+            <span>Mark</span>
+            <strong id="pos-mark-val">--</strong>
+          </div>
+          <div class="pos-grid-item">
+            <span>Liq Price</span>
+            <strong id="pos-liq-val" class="text-yellow">--</strong>
+          </div>
+        </div>
+
+        <!-- In-Trade Management Actions -->
+        <div class="pos-actions">
+          <button id="btn-pos-breakeven" class="btn-pos-action btn-be" title="Shortcut: X">
+            Move to BE
+          </button>
+          <button id="btn-close-25" class="btn-pos-action">25%</button>
+          <button id="btn-close-50" class="btn-pos-action">50%</button>
+          <button id="btn-close-100" class="btn-pos-action" style="color: var(--color-red);" title="Shortcut: C">
+            Close 100%
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Bottom Analytics & Trade History Drawer -->
+  <div class="bottom-drawer">
+    
+    <!-- Educational Performance Metrics -->
+    <div class="metrics-pane">
+      <div class="panel-section-title">
+        <span>Performance Analytics</span>
+      </div>
+      <div class="metrics-grid">
+        <div class="metric-item">
+          <span>Equity <span class="tooltip-badge" data-tooltip="Total account value including floating profits/losses.">?</span></span>
+          <strong id="metric-equity">$10,000.00</strong>
+        </div>
+        <div class="metric-item">
+          <span>Balance <span class="tooltip-badge" data-tooltip="Realized cash in your account.">?</span></span>
+          <strong id="metric-balance">$10,000.00</strong>
+        </div>
+        <div class="metric-item">
+          <span>Net PnL <span class="tooltip-badge" data-tooltip="Net dollar profit and return on account.">?</span></span>
+          <strong id="metric-net-pnl" class="text-green font-bold">$0.00 (0.0%)</strong>
+        </div>
+        <div class="metric-item">
+          <span>Win Rate <span class="tooltip-badge" data-tooltip="Percentage of profitable trades. Even 40-50% is very profitable with 1:2+ R:R!">?</span></span>
+          <strong id="metric-winrate">0.0% (0W / 0L)</strong>
+        </div>
+        <div class="metric-item">
+          <span>Profit Factor <span class="tooltip-badge" data-tooltip="Gross Profits divided by Gross Losses. Above 1.5 is good; above 2.0 is elite.">?</span></span>
+          <strong id="metric-profit-factor">0.00</strong>
+        </div>
+        <div class="metric-item">
+          <span>Max Drawdown <span class="tooltip-badge" data-tooltip="Largest peak-to-valley percentage drop in account equity. Lower is safer!">?</span></span>
+          <strong id="metric-drawdown" class="text-red">0.0%</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trade Journal & History Table (Dedicated Full Width) -->
+    <div class="trade-history-pane">
+      <div class="pane-header">
+        <span>Trade Journal</span>
+        <button id="btn-export-journal" class="btn-control" style="padding: 2px 8px; font-size: 10px;">
+          Export CSV
+        </button>
+      </div>
+      <div class="table-wrapper">
+        <table class="trade-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Side</th>
+              <th>Tag</th>
+              <th>Entry</th>
+              <th>Exit</th>
+              <th>Size</th>
+              <th>PnL</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody id="trade-history-tbody">
+            <tr>
+              <td colspan="8" class="text-center text-muted" style="padding: 24px; text-align: center;">
+                No closed trades yet. Enter trades to populate your journal.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CSV File Upload & Cache Modal -->
+  <div id="upload-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <h2 style="font-size: 18px; margin-bottom: 8px;">Upload 80MB BTC Historical Data</h2>
+      <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
+        Load your <code>BTCUSDT-5m-merged-all-months.csv</code> file. It is parsed seamlessly in a background Web Worker and saved in your browser's local IndexedDB so future visits load in &lt;100ms with zero re-uploading!
+      </p>
+
+      <div id="upload-dropzone" class="dropzone">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2962ff" stroke-width="2" style="margin-bottom: 8px;">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <p style="font-weight: 600; font-size: 13px;">Drag & Drop your 5M CSV file here</p>
+        <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">or click to browse from disk</p>
+        <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
+      </div>
+
+      <div id="upload-progress" style="display: none; margin-top: 16px;">
+        <div class="progress-bar-track">
+          <div id="progress-bar-fill" class="progress-bar-fill"></div>
+        </div>
+        <p id="progress-status-text" style="font-size: 11px; color: var(--text-secondary); margin-top: 6px; text-align: center;">
+          Parsing candles...
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reveal Era Modal -->
+  <div id="era-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="width: 480px;">
+      <h2 id="era-modal-title" style="font-size: 18px; color: var(--color-gold); margin-bottom: 6px;">
+        Historical Market Era
+      </h2>
+      <p id="era-modal-dates" style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px;"></p>
+
+      <div style="background: var(--bg-tertiary); padding: 12px; border-radius: 6px; margin-bottom: 16px;">
+        <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Session Performance</span>
+        <div id="era-modal-performance" style="margin-top: 8px;"></div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end;">
+        <button id="era-modal-close" class="btn-control" style="background: var(--color-blue); color: #fff;">
+          Continue Trading
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/db.js"></script>
+  <script src="js/indicators.js"></script>
+  <script src="js/data-engine.js"></script>
+  <script src="js/replay-engine.js"></script>
+  <script src="js/trading-engine.js"></script>
+  <script src="js/chart-manager.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
